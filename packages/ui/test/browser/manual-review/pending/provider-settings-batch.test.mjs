@@ -12,6 +12,7 @@ import { registerProviderPresentationCases } from "./provider-settings-presentat
 import { registerProviderModelEditorCases } from "./provider-model-editor-cases.mjs";
 import { registerProgressiveModelEditorCases } from "./provider-model-editor-progressive-cases.mjs";
 import { registerOffPeakEligibilityCases } from "./offpeak-eligibility-cases.mjs";
+import { registerProviderModelImportCases } from "./provider-model-import-cases.mjs";
 
 const root = fileURLToPath(new URL("../../../../../../", import.meta.url));
 const entry = "/packages/ui/test/browser/manual-review/pending/provider-settings-batch.fixture.tsx";
@@ -65,6 +66,7 @@ registerOffPeakEligibilityCases(() => ({ browser, origin }));
 registerProviderPresentationCases(() => ({ browser, origin, artifacts }));
 registerProviderModelEditorCases(() => ({ browser, origin, artifacts }));
 registerProgressiveModelEditorCases(() => ({ browser, origin, artifacts }));
+registerProviderModelImportCases(() => ({ browser, origin, artifacts }));
 for (const [width, locale, theme] of [
   [390, "zh-CN", "light"],
   [1200, "en-US", "dark"],

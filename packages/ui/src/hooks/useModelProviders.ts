@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult, ProviderModelListResult } from "@zcode/shared";
 import type { ProviderSettingsView } from "@zcode/services";
 import { useServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
@@ -211,6 +211,25 @@ export function useModelProviders(target: {
     ],
   );
 
+  const listProviderModels = useCallback(
+    async (providerId: string): Promise<ProviderModelListResult> => {
+      try {
+        return await providerSettingsService.listModels({ providerId });
+      } catch (error) {
+        // 旧版远端宿主没有该 RPC 方法时 ProxyChannel 在首次调用才失败；
+        // 这里收口成清单失败结果，避免把 "is not a function" 直接展示给用户。
+        return {
+          success: false,
+          error: {
+            code: "provider-unavailable",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+    },
+    [providerSettingsService],
+  );
+
   return {
     modelProviders: effectiveModelProviders,
     providerTemplates: providerSettingsView?.providerTemplates ?? [],
@@ -232,6 +251,7 @@ export function useModelProviders(target: {
     reorderProviderModels,
     saveDisplayOrder,
     testModelConnectivity,
+    listProviderModels,
     providerSettingsView,
   };
 }

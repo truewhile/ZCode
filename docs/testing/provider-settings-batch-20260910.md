@@ -1,5 +1,13 @@
 # Provider 设置本批浏览器用例
 
+## 从 API 导入模型（2026-10-29）
+
+PMI-01（accepted，pending）：390px 中文浅色 / 1200px 英文深色。真实 Provider 卡片点击「从 API 导入」→ 真实弹窗读取夹具回包 → 全选 → 确认，断言已配置模型被过滤、只提交两条新增模型、弹窗在保存完成后关闭、无横向溢出与页面错误。规格见 [模型列表导入](../../specs/model-provider-model-import.md)。
+
+运行：`CHROME_EXECUTABLE_PATH=<Chromium> node --test --test-name-pattern='provider model import' packages/ui/test/browser/manual-review/pending/provider-settings-batch.test.mjs`。
+
+本机（Windows + 系统 Chrome）两例通过。用例独立运行时首个用例要等 Vite 冷启动预打包，弹窗/导航超时放宽到 60~90s，不代表产品慢；未宣称原生 Electron、手机 shared-host 或真实第三方 `/models` 已验证，保持 pending 身份。
+
 ## MiMo 模板拆分（2026-10-14）
 
 MIMO-03（accepted，pending）：390px 中文浅色 / 1200px 英文深色，真实模板选择器分别显示 Xiaomi MiMo API 和 Xiaomi MiMo Token Plan，tooltip 和图标一致；分别点击后仅发送对应 templateId 的创建动作，详情 Base URL 分别为按量与中国 Token Plan 地址；无横向溢出、页面错误或额外写入。规格及官方核验见 [MiMo 模板](../provider-mimo-templates.md)。复用现有浏览器 fixture，不宣称原生 Electron、手机 shared-host 或真实付费请求已验证。

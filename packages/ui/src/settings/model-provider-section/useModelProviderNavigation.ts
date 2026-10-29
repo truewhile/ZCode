@@ -91,7 +91,9 @@ export function useModelProviderNavigation({
 
   const codingPlanItems = useMemo(
     () =>
-      CODING_PLAN_PROVIDER_SPECS.filter((spec) =>
+      // 产品形态只接入第三方 API：官方 Coding Plan / Start Plan 套餐节点整体下线，
+      // 设置页只保留 Provider（预设 + 自定义）与其 API Key 配置。
+      ([] as typeof CODING_PLAN_PROVIDER_SPECS).filter((spec) =>
         shouldShowCodingPlanForProviderFamilyDomain(spec.oauthProviderId, providerFamilyDomain),
       ).map((spec) => {
         const provider = modelProviders.find((item) => item.providerId === spec.id) ?? null;

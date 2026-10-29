@@ -124,6 +124,18 @@ function makeSnapshot(): ConversationSnapshot {
     backgroundWorks: [],
     // 软门禁 additive 字段:带 default(null),round-trip 归一化形态
     workspaceHookAdmission: null,
+    // 会话统计 additive 字段：带 schema default，夹具写归一化形态，
+    // round-trip 断言 parse 前后 deep-equal 才成立。
+    stats: {
+      turns: 0,
+      steps: 0,
+      modelMs: 0,
+      toolMs: 0,
+      ttftMs: 0,
+      ttftCount: 0,
+      decodeMs: 0,
+      decodeTokens: 0,
+    },
     goal: null,
     plan: null,
     rows: { window: [], totalCount: 0, firstRowId: null },

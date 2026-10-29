@@ -449,6 +449,7 @@ interface ConversationSnapshot {
   inputRouting: InputRouting;
   config: SessionConfigState; // G-01
   usage: SessionUsageState; // G-02
+  stats: SessionStatsState; // 会话统计（轮/步/计时），additive + default
   queue: QueueState;
   pendingInteractions: PendingInteraction[];
   pendingCommands: CommandStateSummary[];

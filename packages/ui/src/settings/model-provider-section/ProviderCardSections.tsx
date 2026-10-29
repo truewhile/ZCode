@@ -11,18 +11,27 @@ import type {
   ProviderSettingsFormProvider,
   ProviderSettingsFormModel,
 } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult, ProviderModelListResult } from "@zcode/shared";
 import type { ProviderApiType } from "@zcode/provider";
 import {
   TID_MODEL_PROVIDER_ADD_MODEL_BUTTON,
   TID_MODEL_PROVIDER_BASE_URL_INPUT,
+  TID_MODEL_PROVIDER_IMPORT_MODELS_BUTTON,
   TID_MODEL_PROVIDER_MODEL_DELETE_BUTTON,
   TID_MODEL_PROVIDER_MODEL_INPUT,
   TID_MODEL_PROVIDER_NAME_EDIT_BUTTON,
   TID_MODEL_PROVIDER_NAME_INPUT,
   testId,
 } from "@zcode/shared/test-ids";
-import { InfoIcon, LockKeyholeIcon, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import {
+  InfoIcon,
+  ListPlus,
+  LockKeyholeIcon,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {
@@ -48,6 +57,7 @@ import {
 import { SortableProviderModelList } from "@/settings/model-provider-section/SortableProviderModelList.js";
 import { useProviderModelDraft } from "@/settings/model-provider-section/useProviderModelDraft.js";
 import { ProviderLogo } from "@/settings/model-provider-section/ProviderLogo.js";
+import { ProviderModelPickerDialog } from "@/settings/model-provider-section/ProviderModelPickerDialog.js";
 import type { ProviderConfigObject } from "@zcode/provider";
 
 export {
@@ -361,6 +371,7 @@ export function ProviderModelsSection({
   onModelEnabledChange,
   onDeleteModel,
   onAddModel,
+  onListModels,
   onReorderModelIds,
   settingsRevision = 0,
 }: {
@@ -378,6 +389,11 @@ export function ProviderModelsSection({
   onDeleteModel: (modelId: string) => void;
   onModelEnabledChange?: (modelId: string, enabled: boolean) => void | Promise<void>;
   onAddModel: (model: ProviderSettingsFormModel) => void | Promise<void>;
+  /**
+   * 读取 Provider `/models` 清单。未装配（远程宿主旧版本、非 API Key 供应商）时
+   * 不展示导入入口，只保留手工填写模型 ID。
+   */
+  onListModels?: () => Promise<ProviderModelListResult>;
   onReorderModelIds?: (modelIds: string[]) => void;
   settingsRevision?: number;
 }) {
@@ -388,6 +404,7 @@ export function ProviderModelsSection({
   const addSavingRef = useRef(false);
   const [addCommitError, setAddCommitError] = useState<string | null>(null);
   const [addModel] = useState(createEmptyModel);
+  const [importOpen, setImportOpen] = useState(false);
   const [addDraftErrorField, setAddDraftErrorField] = useState<
     | "id"
     | "contextWindow"
@@ -465,6 +482,30 @@ export function ProviderModelsSection({
       setAddSaving(false);
     }
   }, [editor, onAddModel]);
+
+  /** 勾选导入：逐个串行写入，第一个失败即中断并回传原因，已成功的条目保留。 */
+  const importModelIds = useCallback(
+    async (modelIds: readonly string[]): Promise<void> => {
+      // 直接复用 `onAddModel` 的空草稿提交边界：每条都按「跟随推荐配置」写入，
+      // 与手工添加保持一致，不额外引入第二种写入路径。
+      // 逐条写入后父层 props 尚未回传，重复判断必须带上本批次已提交的 ID。
+      const known = new Set(models.map((model) => model.modelId.trim().toLowerCase()));
+      for (const modelId of modelIds) {
+        const key = modelId.trim().toLowerCase();
+        if (!key || known.has(key)) continue;
+        known.add(key);
+        const nextModel: ProviderSettingsFormModel = {
+          ...createEmptyModel(),
+          modelId,
+          useRecommendedConfig: true,
+          hasPersonalConfig: true,
+        };
+        await onAddModel(nextModel);
+      }
+    },
+    [models, onAddModel],
+  );
+
   const addDraftErrorMessage = addDraftErrorField
     ? intl.formatMessage({
         id: `settings.modelProvider.modelMetadata.invalid.${addDraftErrorField}`,
@@ -477,17 +518,32 @@ export function ProviderModelsSection({
         <span className="text-ui-base text-foreground-subtle">
           {intl.formatMessage({ id: "settings.modelProvider.models" })}
         </span>
-        <Button
-          type="button"
-          variant="secondary"
-          size="default"
-          className="rounded-lg"
-          data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
-          onClick={openAddDialog}
-        >
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onListModels ? (
+            <Button
+              type="button"
+              variant="default"
+              size="default"
+              className="rounded-lg"
+              data-testid={TID_MODEL_PROVIDER_IMPORT_MODELS_BUTTON}
+              onClick={() => setImportOpen(true)}
+            >
+              <ListPlus data-icon="inline-start" aria-hidden="true" />
+              {intl.formatMessage({ id: "settings.modelProvider.importModels" })}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant={onListModels ? "outline" : "secondary"}
+            size="default"
+            className="rounded-lg"
+            data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
+            onClick={openAddDialog}
+          >
+            <Plus data-icon="inline-start" aria-hidden="true" />
+            {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
+          </Button>
+        </div>
       </div>
       {models.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-input-border bg-input">
@@ -584,6 +640,16 @@ export function ProviderModelsSection({
           }}
         />
       </>
+      {onListModels ? (
+        <ProviderModelPickerDialog
+          open={importOpen}
+          providerName={providerName}
+          existingModelIds={models.map((model) => model.modelId)}
+          onOpenChange={setImportOpen}
+          onFetch={onListModels}
+          onAddModels={importModelIds}
+        />
+      ) : null}
     </div>
   );
 }

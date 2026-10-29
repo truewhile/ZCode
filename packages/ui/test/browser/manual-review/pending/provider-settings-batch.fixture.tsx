@@ -237,6 +237,19 @@ function Fixture() {
                   await request("test", {});
                   return { success: true };
                 }}
+                onListModels={async () => {
+                  await request("listModels", {});
+                  // 夹具模拟一次 /models 回包：两条新模型 + 一条已配置模型，
+                  // 用来验证“已存在的模型不进可导入列表”与批量写入顺序。
+                  return {
+                    success: true,
+                    models: [
+                      { modelId: provider.models[0]!.modelId },
+                      { modelId: "import-fixture-a", displayName: "Fixture A" },
+                      { modelId: "import-fixture-b" },
+                    ],
+                  };
+                }}
               />
             )}
           </ProviderDetailFeedbackBoundary>

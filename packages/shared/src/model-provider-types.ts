@@ -68,6 +68,35 @@ export function isCodingPlanModelProviderId(id: string): boolean {
   );
 }
 
+/** 供应商 `/models` 返回的单个模型条目；只保留导入流程需要的字段。 */
+export interface ProviderModelListEntry {
+  readonly modelId: string;
+  /** 供应商自带的展示名；与 modelId 相同时由调用方忽略。 */
+  readonly displayName?: string;
+  readonly createdAt?: string;
+}
+
+export type ProviderModelListErrorCode =
+  | "provider-unavailable"
+  | "missing-api-key"
+  | "invalid-base-url"
+  | "http-error"
+  | "network-error";
+
+/**
+ * 读取供应商模型清单的结果。
+ * 与连通性测试同构：失败是正常业务分支，不抛异常给渲染层。
+ */
+export type ProviderModelListResult =
+  | { readonly success: true; readonly models: readonly ProviderModelListEntry[] }
+  | {
+      readonly success: false;
+      readonly error: {
+        readonly message: string;
+        readonly code?: ProviderModelListErrorCode;
+      };
+    };
+
 /** 一个正式 Model 的连通性测试结果。 */
 export type ModelConnectivityResult =
   | { readonly success: true }

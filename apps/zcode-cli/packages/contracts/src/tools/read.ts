@@ -26,27 +26,12 @@ export const READ_VIDEO_MAX_INPUT_BYTES = VIDEO_INPUT_MAX_BYTES;
 // Input Schema
 // -----------------------------------------------
 
-const UNSUPPORTED_BINARY_EXTENSIONS = new Set([
-  ".7z",
-  ".a",
-  ".bin",
-  ".bz2",
-  ".class",
-  ".dll",
-  ".dmg",
-  ".dylib",
-  ".exe",
-  ".gz",
-  ".jar",
-  ".o",
-  ".pyc",
-  ".rar",
-  ".so",
-  ".tar",
-  ".tgz",
-  ".wasm",
-  ".zip",
-]);
+// 逆向/破解工作要读的就是这些文件：可执行体、动态库、归档包、字节码。
+// 原来按扩展名在入口就拒绝，等于把「不能读 .exe/.dll/.so/.zip」写成产品限制。
+// 现在这道拒绝撤掉，改由内容判定（fs 层 detectTextEncoding）决定能不能当文本读：
+// 文本型产物（脚本、配置文件、反编译文本、hex dump）照常读；
+// 真二进制走 Bash（xxd/strings/objdump 等）分析才是正确路径。
+// 仍然保留下面 BLOCKING_DEVICE_PATHS：那不是内容限制，是「读它会无限输出/阻塞」。
 const BLOCKING_DEVICE_PATHS = new Set([
   "/dev/console",
   "/dev/fd/0",
@@ -137,28 +122,10 @@ function validateReadPathSemantics(
       path: ["file_path"],
       message: `Cannot read '${filePath}': this device file would block or produce infinite output.`,
     });
-    return;
   }
-
-  const extension = readFileExtension(lowerPath);
-  if (!extension || !UNSUPPORTED_BINARY_EXTENSIONS.has(extension)) return;
-
-  context.addIssue({
-    code: z.ZodIssueCode.custom,
-    path: ["file_path"],
-    message: `This tool cannot read binary files. The file appears to be a binary ${extension} file. Please use appropriate tools for binary file analysis.`,
-  });
 }
 
 export type ReadInput = z.infer<typeof ReadInputSchema>;
-
-function readFileExtension(path: string): string | undefined {
-  const lastSlash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  const basename = path.slice(lastSlash + 1);
-  const dotIndex = basename.lastIndexOf(".");
-  if (dotIndex <= 0) return undefined;
-  return basename.slice(dotIndex);
-}
 
 // -----------------------------------------------
 // Output Types

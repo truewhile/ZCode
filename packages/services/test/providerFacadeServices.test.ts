@@ -164,6 +164,99 @@ describe("Provider Settings 目标环境写入", () => {
       "write failed",
     );
   });
+
+  it("模型清单只读取目标环境 Effective Config，不信任渲染层传入的地址或 Key", async () => {
+    const facade = {
+      onDidChange: vi.fn(),
+      waitForProviderOperations: vi.fn(async () => {}),
+      getView: vi.fn(() => ({
+        providers: [
+          {
+            providerId: "p",
+            enabled: true,
+            executable: true,
+            issues: [],
+            models: [],
+            effectiveConfig: {
+              access: { type: "api-key", apiKey: "sk-live" },
+              api: { type: "openai-chat-completions", baseUrl: "https://api.example.com/v1" },
+            },
+          },
+        ],
+      })),
+    };
+    const listProviderModels = vi.fn(async () => ({
+      success: true as const,
+      models: [{ modelId: "gpt-5" }],
+    }));
+    const service = createProviderSettingsService(
+      facade as unknown as ProviderSettingsFacade,
+      undefined,
+      undefined,
+      listProviderModels,
+    );
+
+    await expect(service.listModels({ providerId: "p" })).resolves.toEqual({
+      success: true,
+      models: [{ modelId: "gpt-5" }],
+    });
+    expect(facade.waitForProviderOperations).toHaveBeenCalledWith("p");
+    expect(listProviderModels).toHaveBeenCalledWith({
+      apiType: "openai-chat-completions",
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "sk-live",
+    });
+  });
+
+  it("模型清单对缺失 Provider 与账号型 Provider 都不发请求", async () => {
+    const listProviderModels = vi.fn(async () => ({ success: true as const, models: [] }));
+    const missing = createProviderSettingsService(
+      {
+        onDidChange: vi.fn(),
+        waitForProviderOperations: vi.fn(async () => {}),
+        getView: vi.fn(() => ({ providers: [] })),
+      } as unknown as ProviderSettingsFacade,
+      undefined,
+      undefined,
+      listProviderModels,
+    );
+    await expect(missing.listModels({ providerId: "missing" })).resolves.toMatchObject({
+      success: false,
+      error: { code: "provider-unavailable" },
+    });
+
+    const accountProvider = createProviderSettingsService(
+      {
+        onDidChange: vi.fn(),
+        waitForProviderOperations: vi.fn(async () => {}),
+        getView: vi.fn(() => ({
+          providers: [
+            {
+              providerId: "account",
+              enabled: true,
+              executable: true,
+              issues: [],
+              models: [],
+              effectiveConfig: {
+                access: { type: "zhipu-account", accountType: "zai", mode: "start-plan" },
+                api: { type: "anthropic-messages", baseUrl: "https://api.z.ai/api/anthropic" },
+              },
+            },
+          ],
+        })),
+      } as unknown as ProviderSettingsFacade,
+      undefined,
+      undefined,
+      listProviderModels,
+    );
+    await accountProvider.listModels({ providerId: "account" });
+    expect(listProviderModels).toHaveBeenCalledWith({
+      apiType: "anthropic-messages",
+      baseUrl: "https://api.z.ai/api/anthropic",
+      apiKey: "",
+    });
+    expect(listProviderModels).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("createModelSelectionService", () => {

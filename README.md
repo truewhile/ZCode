@@ -166,6 +166,8 @@ pnpm bundle:desktop -- --help
 sudo xattr -rd com.apple.quarantine /Applications/ZCode.app
 ```
 
+GitHub Actions 上已有一条同类流水线（`.github/workflows/desktop-package.yml`）：PR 验证打包链路，`v*` tag 打包并生成草稿 Release。平台矩阵、签名 secrets 与排障见 [GitHub Actions 桌面打包](docs/ci-github-actions-desktop-packaging.md)。
+
 ### ZCode 命令行版
 
 构建入口为 `pnpm build:zcode`。脚本会依次构建 CLI/TUI、后端和 Web，收集 TUI 的原生库、worker 与运行时依赖，再组装发行包；运行发行包仍需要 Node.js，版本以 `mise.toml` 为准。

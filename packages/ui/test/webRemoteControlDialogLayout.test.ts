@@ -59,9 +59,6 @@ vi.mock("@/hooks/usePlatform.js", () => ({
   usePlatform: () => platformMock,
 }));
 
-vi.mock("@/hooks/useOAuth.js", () => ({
-  useOAuth: () => ({ activeProvider: null, loadingProviders: false, refreshProviders: vi.fn() }),
-}));
 
 vi.mock("@/store/StoreProvider.js", () => ({
   useZCodeStore: (
@@ -106,27 +103,25 @@ describe("WebRemoteControlDialog layout", () => {
     feedbackMocks.toast.mockClear();
   });
 
-  it("auth-required 显示登录入口，无二维码、生成中、复制链接或错误toast", async () => {
+  it("auth-required 只展示提示，不再提供官方账号登录入口", async () => {
     platformMock.getWebRemoteControlStatus.mockResolvedValueOnce({ status: "auth-required" });
-    const onOpenChange = vi.fn();
     const view = render(
       createElement(WebRemoteControlDialog, {
         open: true,
-        onOpenChange,
+        onOpenChange: vi.fn(),
         workspacePath: "/tmp/project",
       }),
     );
-    const login = await view.findByRole("button", { name: "webRemoteControl.authRequired.login" });
-    expect(view.container.textContent).toContain("webRemoteControl.authRequired.title");
+    await view.findByText("webRemoteControl.authRequired.title");
     expect(view.container.textContent).toContain("webRemoteControl.authRequired.description");
-    expect(view.container.textContent).not.toContain("webRemoteControl.generating");
-    expect(view.queryByTestId("web-remote-control-copy-link-row")).toBeNull();
-    expect(view.queryByRole("img")).toBeNull();
+    // 官方账号 OAuth 登录已移除：远控鉴权失败时不再渲染登录按钮，也不触发登录入口。
+    expect(
+      view.queryByRole("button", { name: "webRemoteControl.authRequired.login" }),
+    ).toBeNull();
+    expect(view.queryByTestId("web-remote-control-login")).toBeNull();
+    expect(feedbackMocks.requestLoginEntry).not.toHaveBeenCalled();
     expect(platformMock.startWebRemoteControl).not.toHaveBeenCalled();
     expect(feedbackMocks.toast).not.toHaveBeenCalled();
-    fireEvent.click(login);
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(feedbackMocks.requestLoginEntry).toHaveBeenCalledOnce();
   });
   it("启动因缺少JWT失败时读取main的auth-required状态，不展示失败toast", async () => {
     platformMock.getWebRemoteControlStatus
@@ -140,7 +135,10 @@ describe("WebRemoteControlDialog layout", () => {
         workspacePath: "/tmp/project",
       }),
     );
-    await view.findByRole("button", { name: "webRemoteControl.authRequired.login" });
+    await view.findByText("webRemoteControl.authRequired.title");
+    expect(
+      view.queryByRole("button", { name: "webRemoteControl.authRequired.login" }),
+    ).toBeNull();
     expect(feedbackMocks.toast).not.toHaveBeenCalled();
   });
   it("treats native start cancellation as idle without failure UI", async () => {

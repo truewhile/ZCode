@@ -1,5 +1,14 @@
 # Tool Change Chain Spec
 
+## Read 不再按扩展名拒绝二进制（2026-10-29）
+
+`Read` 的 `validateReadPathSemantics` 移除扩展名黑名单（`.exe` / `.dll` / `.so` / `.zip` /
+`.jar` / `.class` / `.pyc` 等）。逆向、反编译、破解类工作要读的正是这些路径，按扩展名在
+schema 层直接拒绝等于把「不能读可执行体」写成产品限制。能不能当文本读改由 fs 层
+`detectTextEncoding` 的内容判定决定：文本型产物照常读，真二进制返回既有的
+`unsupported` 错误。`BLOCKING_DEVICE_PATHS`（`/dev/zero` 等会无限输出的设备文件）保持不变
+——那不是内容限制，是读它会阻塞。工具 schema、输出契约和错误码不变。
+
 ## Bash 临时输出路径隔离
 
 主应用及 workflow 子运行时装配 tmp 父目录 → execution adapter 实际准备具名输出文件 →

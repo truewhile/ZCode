@@ -886,3 +886,16 @@ exceptions:
       - packages/ui/src/settings/DynamicWorkflowModeSetting.tsx
       - packages/ui/src/store/dynamicWorkflowAvailabilityStore.ts
     reason: Admitted upstream files edited only to let the user's dynamic workflow mode choice always win and keep the settings row visible; adopting packages/shared/src and packages/ui/src needs a separate module boundary refactor.
+  - id: composer-session-stats-unmanaged-files
+    rule: unmanaged-new-file
+    paths:
+      - packages/shared/src/zcode-protocol-v4/session-stats.ts
+      - packages/ui/src/v4/composer/ComposerSessionStats.tsx
+      - packages/ui/src/v4/composer/sessionStatsReadings.ts
+    reason: Composer session statistics (turns/steps/tps/cache hit) land as path-exact files inside the unmanaged shared protocol and ui modules; adopting those directories needs a separate module boundary refactor.
+  - id: provider-model-import-unmanaged-files
+    rule: unmanaged-new-file
+    paths:
+      - packages/services/src/model-provider/providerModelListing.ts
+      - packages/ui/src/settings/model-provider-section/ProviderModelPickerDialog.tsx
+    reason: Provider model import (GET /models + checkbox picker, specs/model-provider-model-import.md) adds one Host lister and one settings dialog next to the existing Provider Settings files inside the unmanaged services and ui modules; adopting those directories needs a separate module boundary refactor.

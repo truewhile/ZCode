@@ -41,7 +41,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       supportsTerminal: false,
       supportsReview: false,
       themeTarget: "dark",
@@ -62,7 +61,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       themeTarget: "dark",
       shortcuts,
       handlers: createHandlers(),
@@ -85,7 +83,6 @@ describe("createQuickPickCommands", () => {
       "feedback",
       "community",
       "product-docs",
-      "login",
     ]);
     expect(commands.find((command) => command.id === "open-workspace")).toMatchObject({
       sectionId: "suggested",
@@ -142,7 +139,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: false,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       themeTarget: "dark",
       shortcuts,
       handlers: createHandlers(),
@@ -158,7 +154,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: false,
-      isLoggedIn: false,
       themeTarget: "dark",
       shortcuts,
       handlers: createHandlers(),
@@ -174,7 +169,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       supportsEmbeddedBrowser: false,
       themeTarget: "dark",
       shortcuts,
@@ -191,7 +185,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       themeTarget: "dark",
       shortcuts,
       handlers,
@@ -208,7 +201,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       themeTarget: "dark",
       shortcuts,
       handlers,
@@ -226,7 +218,6 @@ describe("createQuickPickCommands", () => {
       allowOpenWorkspace: true,
       canOpenCommunity: true,
       isSidebarVisible: true,
-      isLoggedIn: false,
       themeTarget: "light",
       shortcuts,
       handlers: createHandlers(),
@@ -260,22 +251,18 @@ describe("createQuickPickCommands", () => {
     }
   });
 
-  it("uses logout instead of login for authenticated users", () => {
+  it("命令面板不再提供官方账号登录/登出命令", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
       canOpenCommunity: false,
       isSidebarVisible: true,
-      isLoggedIn: true,
       themeTarget: "dark",
       shortcuts,
       handlers: createHandlers(),
     });
 
     expect(commands.some((command) => command.id === "login")).toBe(false);
-    expect(commands.find((command) => command.id === "logout")).toMatchObject({
-      sectionId: "app",
-      titleId: "quickPick.command.logout",
-    });
+    expect(commands.some((command) => command.id === "logout")).toBe(false);
     expect(commands.some((command) => command.id === "community")).toBe(false);
   });
 });

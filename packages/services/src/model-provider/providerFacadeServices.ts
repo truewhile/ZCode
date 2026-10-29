@@ -16,9 +16,11 @@ import {
   type ResolveModelConfigInput,
   type SavePersonalModelDraftInput,
 } from "@zcode/provider";
+import { isApiKeyAccess } from "@zcode/provider";
 import { createServiceDescriptor } from "../descriptors.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult, ProviderModelListResult } from "@zcode/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
+import type { ProviderModelLister, ProviderModelListRequest } from "./providerModelListing.js";
 
 export type {
   ProviderSettingsProviderView,
@@ -68,6 +70,11 @@ export interface IProviderSettingsService {
   testModelConnectivity(
     input: ProviderSettingsConnectivityRequest,
   ): Promise<ModelConnectivityResult>;
+  /**
+   * 读取 Provider 当前 Base URL + API Key 可见的模型清单。
+   * 只读取已落盘的 Effective Config，渲染层不传 Key、不传地址。
+   */
+  listModels(input: ProviderModelListRequestInput): Promise<ProviderModelListResult>;
 }
 
 export const IProviderSettingsService = createServiceDescriptor<IProviderSettingsService>(
@@ -92,6 +99,10 @@ export type ProviderSettingsConnectivityTester = (
   input: ProviderSettingsConnectivityTestInput,
 ) => Promise<ModelConnectivityResult>;
 
+export interface ProviderModelListRequestInput {
+  readonly providerId: ProviderId;
+}
+
 export interface IModelSelectionService {
   readonly onDidChange: Event<ModelSelectionView>;
   getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
@@ -110,6 +121,7 @@ export function createProviderSettingsService(
   facade: ProviderSettingsFacade,
   ensureReady: () => Promise<void> = async () => {},
   testConnectivity?: ProviderSettingsConnectivityTester,
+  listProviderModels?: ProviderModelLister,
 ): IProviderSettingsService {
   return {
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
@@ -205,6 +217,35 @@ export function createProviderSettingsService(
         providerId: input.providerId,
         modelId: input.modelId,
       });
+    },
+    listModels: async (input) => {
+      await ensureReady();
+      if (!listProviderModels) {
+        throw new Error("当前 Environment 未装配模型清单读取能力");
+      }
+      // 同一 Provider 的写入还没落定就发请求会读到旧 Base URL / 旧 Key；
+      // 复用连通性测试的操作队列等待，不额外引入第二种同步机制。
+      await facade.waitForProviderOperations(input.providerId);
+      const provider = facade
+        .getView()
+        .providers.find((item) => item.providerId === input.providerId);
+      if (!provider) {
+        return {
+          success: false,
+          error: {
+            code: "provider-unavailable",
+            message: "This provider is currently unavailable for model listing.",
+          },
+        };
+      }
+      const access = provider.effectiveConfig.access;
+      const apiKey = isApiKeyAccess(access) ? (access.apiKey?.trim() ?? "") : "";
+      const request: ProviderModelListRequest = {
+        apiType: provider.effectiveConfig.api?.type ?? "anthropic-messages",
+        baseUrl: provider.effectiveConfig.api?.baseUrl ?? "",
+        apiKey,
+      };
+      return listProviderModels(request);
     },
   };
 }

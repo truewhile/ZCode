@@ -216,6 +216,17 @@ export type {
   ProviderRuntimeOptions,
 } from "./model-provider/providerRuntime.js";
 export {
+  createProviderModelLister,
+  parseProviderModelListPayload,
+  resolveProviderModelListHeaders,
+  resolveProviderModelListUrls,
+} from "./model-provider/providerModelListing.js";
+export type {
+  ProviderModelListFetcher,
+  ProviderModelLister,
+  ProviderModelListRequest,
+} from "./model-provider/providerModelListing.js";
+export {
   createProviderProvisioningSource,
   listProviderProvisioningCredentialKeys,
   resolveCredentialFilePath,
@@ -475,6 +486,7 @@ import {
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
 import { createProviderSettingsConnectivityTester } from "./model-provider/providerSettingsConnectivity.js";
+import { createProviderModelLister } from "./model-provider/providerModelListing.js";
 import {
   createProviderProvisioningSource,
   listProviderProvisioningCredentialKeys,
@@ -1622,6 +1634,9 @@ export function createLocalServices(options: {
         return providerConnectivityAgentService.testModelConnectivity(input);
       },
     }),
+    // 模型清单读写属于设置页的 Provider 事实，直接在 Host 发请求；沿用同一 Host 网络栈
+    // （代理 / 自定义 CA）而不是渲染层的 fetch，避免两侧网络策略分叉。
+    listProviderModels: createProviderModelLister({ fetchImpl: hostApiNetworkTransport.fetch }),
     disposeAccountSource: () => {
       disposeAccountProviderInvalidation();
       accountProviderRefreshErrorDispose();

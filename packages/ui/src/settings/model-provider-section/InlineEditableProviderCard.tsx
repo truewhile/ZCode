@@ -6,7 +6,7 @@ import {
   type ProviderSettingsFormProvider,
   type ProviderSettingsFormModel,
 } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult, ProviderModelListResult } from "@zcode/shared";
 import {
   isApiKeyAccess,
   type ProviderApiType,
@@ -146,6 +146,7 @@ export function InlineEditableProviderCard({
   onDeletePersonalModel,
   onDelete,
   onTestModel,
+  onListModels,
   onReorderModelIds,
   readOnlyEndpoints,
   presetApiKeyUrl,
@@ -173,6 +174,8 @@ export function InlineEditableProviderCard({
   onDeletePersonalModel?: (providerId: string, modelId: string) => Promise<unknown>;
   onDelete?: () => void | Promise<void>;
   onTestModel?: (providerId: string, modelId: string) => Promise<ModelConnectivityResult>;
+  /** 读取 Provider `/models`；未装配时模型区只保留手工添加入口。 */
+  onListModels?: (providerId: string) => Promise<ProviderModelListResult>;
   onReorderModelIds?: (modelIds: string[]) => Promise<void>;
   readOnlyEndpoints?: boolean;
   presetApiKeyUrl?: string;
@@ -631,6 +634,18 @@ export function InlineEditableProviderCard({
     [commitPendingDraft, onTestModel, provider.providerId],
   );
 
+  const handleListModels = useCallback(async (): Promise<ProviderModelListResult> => {
+    if (!onListModels) {
+      return {
+        success: false,
+        error: { code: "provider-unavailable", message: "Model listing is unavailable" },
+      };
+    }
+    // 与连接测试同一草稿边界：先落盘 Base URL / API Key，Host 才能按 Effective Config 请求。
+    await commitPendingDraft("model-list");
+    return onListModels(provider.providerId);
+  }, [commitPendingDraft, onListModels, provider.providerId]);
+
   const handleModelCommit = useCallback(
     async (
       originalModelId: string,
@@ -854,6 +869,9 @@ export function InlineEditableProviderCard({
           onModelEnabledChange={handleModelEnabledChange}
           onDeleteModel={handleDeleteModel}
           onAddModel={handleAddModel}
+          // 账号型 Provider 的凭证不在 Provider Config 里，Host 侧清单读取只支持 API Key；
+          // 不给账号 Provider 展示一个必然失败的导入入口。
+          onListModels={isApiKeyProvider ? handleListModels : undefined}
           onReorderModelIds={onReorderModelIds ? handleReorderModelIds : undefined}
           settingsRevision={settingsRevision ?? 0}
         />

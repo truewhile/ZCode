@@ -1,77 +1,76 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLoginApiKeyDefaultModelPreferenceFromSelection,
-  buildLoginApiKeySkipSettings,
-  resolveLoginApiKeyDefaultProvider,
-  resolveHydratedLoginApiKeyValue,
-  resolveLoginApiKeyTemplateId,
-  shouldShowLoginApiKeyLink,
+  buildLoginProviderInitialConfig,
+  isHttpUrl,
+  normalizeProviderBaseUrl,
+  validateLoginProviderDraft,
 } from "@/login/LoginApiKeyForm.helpers.js";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
-describe("LoginApiKeyForm provider update helpers", () => {
-  it("只根据 App 已解析语言决定 API key provider 默认值", () => {
-    expect(resolveLoginApiKeyDefaultProvider("zh-CN")).toBe("bigmodel");
-    expect(resolveLoginApiKeyDefaultProvider("en-US")).toBe("zai");
+const validDraft = {
+  name: "My Provider",
+  baseUrl: "https://api.example.com",
+  apiFormat: "openai-chat-completions" as const,
+  apiKey: "sk-test",
+  modelId: "gpt-4o-mini",
+};
+
+describe("LoginApiKeyForm 第三方供应商接入", () => {
+  it("必填项齐全时校验通过", () => {
+    expect(validateLoginProviderDraft(validDraft)).toBeNull();
   });
 
-  it("按弹窗里的提供方选择写入对应内置 provider id", () => {
-    expect(resolveLoginApiKeyTemplateId("zai")).toBe("zai-api");
-    expect(resolveLoginApiKeyTemplateId("bigmodel")).toBe("bigmodel-api");
+  it("按顺序返回第一个缺失或非法的字段", () => {
+    expect(validateLoginProviderDraft({ ...validDraft, name: "  " })).toBe("name");
+    expect(validateLoginProviderDraft({ ...validDraft, baseUrl: "api.example.com" })).toBe(
+      "baseUrl",
+    );
+    expect(validateLoginProviderDraft({ ...validDraft, apiKey: " " })).toBe("apiKey");
+    expect(validateLoginProviderDraft({ ...validDraft, modelId: "" })).toBe("modelId");
   });
 
-  it("跳过 API key 时只写入当前 provider family domain", () => {
-    expect(buildLoginApiKeySkipSettings("bigmodel", 300)).toEqual({
-      providerFamilyDomain: "bigmodel",
-      providerFamilyDomainUpdatedAt: 300,
-      providerFamilyDomainMigrated: true,
+  it("只接受带协议的合法 URL", () => {
+    expect(isHttpUrl("https://api.example.com")).toBe(true);
+    expect(isHttpUrl("http://127.0.0.1:8080")).toBe(true);
+    expect(isHttpUrl("ftp://api.example.com")).toBe(false);
+    expect(isHttpUrl("https://")).toBe(false);
+  });
+
+  it("保存前去掉 Base URL 尾部斜杠", () => {
+    expect(normalizeProviderBaseUrl(" https://api.example.com/v1/ ")).toBe(
+      "https://api.example.com/v1",
+    );
+  });
+
+  it("构造第三方 Provider 的初始配置：api-key + 自定义端点", () => {
+    expect(
+      buildLoginProviderInitialConfig({
+        ...validDraft,
+        baseUrl: " https://api.example.com/v1/ ",
+        apiKey: " sk-test ",
+      }),
+    ).toEqual({
+      access: { type: "api-key", apiKey: "sk-test" },
+      api: { type: "openai-chat-completions", baseUrl: "https://api.example.com/v1" },
     });
   });
 
-  it("只有输入框为空且 provider 有 URL 时展示获取 API key 链接", () => {
-    expect(shouldShowLoginApiKeyLink("", "https://z.ai/manage-apikey/apikey-list")).toBe(true);
-    expect(shouldShowLoginApiKeyLink(" sk-login ", "https://z.ai/manage-apikey/apikey-list")).toBe(
-      false,
-    );
-    expect(shouldShowLoginApiKeyLink("", undefined)).toBe(false);
-  });
-
-  it("新 Provider Runtime 从 Selection View 选择 API key 登录后的默认模型", () => {
+  it("登录后默认模型取新建 Provider 的首个模型", () => {
     expect(
       buildLoginApiKeyDefaultModelPreferenceFromSelection(
         {
           revision: 3,
           providers: [
             {
-              providerId: "bigmodel-api",
-              config: {
-                kind: "api",
-                models: ["glm-5.3", "glm-5.2"],
-              },
-              models: [
-                { modelId: "glm-5.3", config: {} },
-                { modelId: "glm-5.2", config: {} },
-              ],
+              providerId: "provider-1",
+              config: { kind: "api", models: ["gpt-4o-mini"] },
+              models: [{ modelId: "gpt-4o-mini", config: {} }],
             },
           ],
         },
-        "bigmodel-api",
+        "provider-1",
       ),
-    ).toBe(encodeCustomModelValue("bigmodel-api", "glm-5.3"));
-  });
-
-  it("已保存 API key 只在用户尚未编辑输入框时回填", () => {
-    expect(
-      resolveHydratedLoginApiKeyValue({
-        savedApiKey: " sk-saved ",
-        userEdited: false,
-      }),
-    ).toBe("sk-saved");
-    expect(
-      resolveHydratedLoginApiKeyValue({
-        savedApiKey: "sk-saved",
-        userEdited: true,
-      }),
-    ).toBeNull();
+    ).toBe(encodeCustomModelValue("provider-1", "gpt-4o-mini"));
   });
 });

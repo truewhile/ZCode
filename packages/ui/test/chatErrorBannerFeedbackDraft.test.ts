@@ -120,7 +120,7 @@ describe("ChatErrorBanner feedback draft", () => {
     expect(buttonMock.props.some((props) => props["aria-label"] === "配置")).toBe(true);
   });
 
-  it("远程 workspace 缺模型时只切换措辞，动作仍是本机配置与升级", () => {
+  it("远程 workspace 缺模型时只切换措辞，动作仍是本机配置", () => {
     const html = renderToStaticMarkup(
       createElement(
         ZCodeIntlProvider,
@@ -135,7 +135,6 @@ describe("ChatErrorBanner feedback draft", () => {
             },
             modelConfigTarget: "remote",
             onOpenModelSettings: vi.fn(),
-            onOpenUpgrade: vi.fn(),
           }),
         ),
       ),
@@ -144,7 +143,7 @@ describe("ChatErrorBanner feedback draft", () => {
     expect(html).toContain(zhCN["chat.error.remoteNoAvailableModel"]);
     expect(html).not.toContain(zhCN["chat.error.noAvailableModel"]);
     expect(buttonMock.props.some((props) => props["aria-label"] === "配置")).toBe(true);
-    expect(buttonMock.props.some((props) => props["aria-label"] === "升级")).toBe(true);
+    expect(buttonMock.props.some((props) => props["aria-label"] === "升级")).toBe(false);
     expect(buttonMock.props.some((props) => props["aria-label"] === "去同步")).toBe(false);
   });
 });

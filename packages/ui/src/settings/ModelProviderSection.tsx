@@ -271,6 +271,7 @@ export function ModelProviderSection({
     saveDisplayOrder,
     reorderableProviderIds,
     testModelConnectivity,
+    listProviderModels,
     providerSettingsView,
   } = useModelProviders({
     workspacePath,
@@ -701,6 +702,19 @@ export function ModelProviderSection({
       setSelectedNodeKey,
       intl,
     });
+  // 官方预设供应商下线后，首次安装的模型供应商页可能没有任何导航项。
+  // 这种情况下自动打开模板选择，避免详情区长期停在 loading 卡片。
+  const autoOpenedTemplatePickerRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedTemplatePickerRef.current || loading) {
+      return;
+    }
+    if (navigationItems.length > 0) {
+      return;
+    }
+    autoOpenedTemplatePickerRef.current = true;
+    setTemplatePickerOpen(true);
+  }, [loading, navigationItems.length]);
   const selectedPlanAccessKey =
     selectedNavItem?.type === "codingPlan" || selectedNavItem?.type === "teamPlan"
       ? selectedNavItem.key
@@ -1184,6 +1198,7 @@ export function ModelProviderSection({
           // Provider 的 Effective 模型无法写入 Personal modelOrder。模型调序独立于成员来源。
           onReorderProviderModels={reorderProviderModels}
           onTestModel={handleTestModel}
+          onListModels={listProviderModels}
           onCodingPlanLogin={handleCodingPlanLogin}
           onRetryCodingPlan={() => {
             // 取 Key 失败不等于登录失效；沿用 Host 手动刷新，不清除 OAuth 或重新登录。

@@ -11,6 +11,7 @@ import {
   isIndividualCodingPlanModelProviderId,
   resolveModelProviderFamilySpecByProviderId,
   type ModelConnectivityResult,
+  type ProviderModelListResult,
   type OAuthProviderId,
 } from "@zcode/shared";
 import {
@@ -246,6 +247,7 @@ export function ModelProviderSectionDetail({
   onDelete,
   onReorderProviderModels,
   onTestModel,
+  onListModels,
   onCodingPlanLogin,
   onRetryCodingPlan,
   onCodingPlanDisconnect,
@@ -285,6 +287,8 @@ export function ModelProviderSectionDetail({
   onDelete: (provider: ProviderSettingsFormProvider) => Promise<void>;
   onReorderProviderModels?: (providerId: string, modelIds: string[]) => Promise<void>;
   onTestModel: (providerId: string, modelId: string) => Promise<ModelConnectivityResult>;
+  /** 读取 Provider `/models` 清单；未装配时设置页只保留手工添加模型。 */
+  onListModels?: (providerId: string) => Promise<ProviderModelListResult>;
   onRetryCodingPlan?: () => void | Promise<void>;
   onCodingPlanLogin: (
     presetId: BuiltinModelProviderId,
@@ -320,9 +324,10 @@ export function ModelProviderSectionDetail({
     onSavePersonalModelDraft,
     onSetPersonalModelEnabled,
     onDeletePersonalModel,
+    // 模型清单入口在卡片内按 API Key 类型再判一次；账号型 Provider 不展示。
+    onListModels,
     settingsRevision: providerSettingsView?.revision,
-  };
-  const selectedPlanAccess = useMemo(() => {
+  };  const selectedPlanAccess = useMemo(() => {
     if (!isPlanNavItem(selectedNavItem)) return undefined;
     if (selectedNavItem.type === "teamPlan")
       return resolveTeamPlanInspectionAccess(selectedNavItem);

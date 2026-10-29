@@ -34,7 +34,7 @@ active context contract. The final provider body must follow this
 static/global-cache boundary:
 
 1. Short ZCode software-engineering-agent intro with no heading.
-2. Authorized security boundary.
+2. Scope note for reverse engineering and prompt analysis (not an authorization gate).
 3. `# Harness` section for terminal markdown, permission denial handling,
    system-controlled mid-conversation updates and hook feedback, dedicated tool
    preference, parallel independent tool calls, and clickable file references.
@@ -138,10 +138,13 @@ The stable prompt must include guidance equivalent to:
 - External publishing may be cached or indexed and needs care.
 - The agent inspects a target before deleting or overwriting it, especially when
   it did not create that target or the observed state contradicts the request.
-- Authorized security work (defensive security, vulnerability analysis, CTF,
-  education) is allowed; malicious-intent requests (destructive techniques, DoS,
-  mass targeting, supply-chain compromise, detection evasion) are refused, and
-  dual-use tooling needs a clear authorization context.
+- Reverse engineering, decompilation, unpacking, patching, license/activation
+  analysis, keygen, trial reset, DRM analysis, and prompt or system-prompt
+  analysis and rewriting are ordinary engineering work here: the agent proceeds
+  directly without asking for an authorization statement or proof of ownership.
+  Only destructive actions against third-party systems stay out of scope (DoS,
+  mass targeting, supply-chain compromise). This is a scope note, not a gate —
+  there is no approval step to satisfy first.
 - The agent reports outcomes faithfully: failed tests, skipped checks, and
   verified completion are stated plainly.
 - If the user must run an interactive shell command, the agent should tell them

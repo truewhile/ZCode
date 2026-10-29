@@ -7,6 +7,5 @@ export const webRemoteControlUiModule = {
     "index.ts",
     "contract.ts",
     "WebRemoteControlDeviceHeader.tsx",
-    "app/useWebRemoteControlAuthSync.ts",
   ],
 } as const;

@@ -210,6 +210,37 @@ export const sessionUsageStateSchema = z.object({
 });
 export type SessionUsageState = z.infer<typeof sessionUsageStateSchema>;
 
+/**
+ * 会话统计（composer 统计条）。规格见 docs/chat/composer-session-stats.md。
+ *
+ * 全部由 CLI 投影累计，renderer 只读：turns/steps 来自 TurnStarted/ModelComplete，
+ * modelMs/ttftMs/decodeMs 来自 ModelNetworkStatus(main_turn)，toolMs 来自工具终态。
+ * ModelNetworkStatus 不进 transcript，冷恢复后计时字段归零、速度读数隐藏——不为此
+ * 新增第二条会话事实源。
+ */
+export const sessionStatsStateSchema = z.object({
+  turns: z.number().int().nonnegative(),
+  steps: z.number().int().nonnegative(),
+  modelMs: z.number().nonnegative(),
+  toolMs: z.number().nonnegative(),
+  ttftMs: z.number().nonnegative(),
+  ttftCount: z.number().int().nonnegative(),
+  decodeMs: z.number().nonnegative(),
+  decodeTokens: z.number().int().nonnegative(),
+});
+export type SessionStatsState = z.infer<typeof sessionStatsStateSchema>;
+
+export const EMPTY_SESSION_STATS: SessionStatsState = {
+  turns: 0,
+  steps: 0,
+  modelMs: 0,
+  toolMs: 0,
+  ttftMs: 0,
+  ttftCount: 0,
+  decodeMs: 0,
+  decodeTokens: 0,
+};
+
 // ── queue（不持久化，裁决：CLI 进程死亡即丢，客户端对账后由用户决定重发）──
 export const queueItemSchema = conversationInputIntentSchema.extend({
   dispatch: conversationInputDispatchSchema.extend({
@@ -507,6 +538,9 @@ export const conversationSnapshotSchema = z.object({
   // 持久化稳定事实供 live 客户端识别一次性提示；旧快照缺字段时不触发。
   modelTransition: sessionModelTransitionSchema.nullable().default(null),
   usage: sessionUsageStateSchema,
+  // Additive：旧 CLI/旧快照不带该字段时按零统计处理，统计条整行不渲染。
+  // default 用工厂，避免解析结果共享同一个可变对象。
+  stats: sessionStatsStateSchema.default(() => ({ ...EMPTY_SESSION_STATS })),
   queue: queueStateSchema,
   pendingInteractions: z.array(pendingInteractionSchema),
   pendingCommands: z.array(commandStateSummarySchema),

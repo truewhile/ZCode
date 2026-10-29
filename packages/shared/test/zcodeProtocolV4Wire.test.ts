@@ -104,6 +104,17 @@ function makeSnapshotFrame(title: string): ConversationTopicFrame {
     backgroundWorks: [],
     // 软门禁 additive 字段:归一化形态(带 default(null))
     workspaceHookAdmission: null,
+    // 会话统计 additive 字段:归一化形态(带 schema default)
+    stats: {
+      turns: 0,
+      steps: 0,
+      modelMs: 0,
+      toolMs: 0,
+      ttftMs: 0,
+      ttftCount: 0,
+      decodeMs: 0,
+      decodeTokens: 0,
+    },
     goal: null,
     plan: null,
     rows: { window: [], totalCount: 0, firstRowId: null },

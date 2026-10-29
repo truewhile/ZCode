@@ -229,7 +229,8 @@ ZCode 应将路径权限做成统一 filesystem permission adapter，`Read` 只�
 - PDF 页码范围超过单次最大页数。
 - 路径命中 deny 规则。
 - UNC 路径需要权限确认，避免 Windows NTLM 泄露。
-- 二进制文件且不是 PDF、图片或 SVG。
+- 扩展名不再是拒绝理由：`.exe` / `.dll` / `.so` / `.zip` / `.jar` 等按内容判定，
+  文本型内容（脚本、配置、反编译文本）照常读；逆向场景需要的正是这些路径。
 - 会阻塞或无限输出的 device path，例如 `/dev/zero`、`/dev/stdin`。
 - 文件不存在时附带 cwd 和相似文件建议。
 - 文本或 notebook 超过 size/token budget。
@@ -254,7 +255,7 @@ ZCode 应将路径权限做成统一 filesystem permission adapter，`Read` 只�
 | 模型可见行号格式                   | implemented | 当前文本输出通过 `formatModelContent` 转成 cat-n 风格 `<lineNumber>: <content>`，避免 JSON 转义污染 `Edit.old_string`；`Edit` 仍兼容旧的 `<lineNumber>\t<content>` 输入。  |
 | readFileState                      | missing     | 当前 `Read` 尚未记录完整 read cache，后续 `Edit` / `Write` 不能判断未读、partial read 或 stale mutation。                                                                  |
 | 重复读取 dedup                     | missing     | 尚未返回 `file_unchanged` stub。                                                                                                                                           |
-| 文件类型、device path 和大文件保护 | partial     | 当前已实现文本大文件 `256KB` 总大小保护、真实范围读取和 `25_000` token 输出保护；二进制和 device path 失败路径仍待补齐。                                                     |
+| 文件类型、device path 和大文件保护 | partial     | 当前已实现文本大文件 `256KB` 总大小保护、真实范围读取和 `25_000` token 输出保护。扩展名黑名单已移除（逆向场景要读 `.exe`/`.dll`/`.so`/压缩包），改由 fs 层内容判定拒绝真二进制；device path 失败路径仍待补齐。 |
 
 后续优先级：保留文本大文件与 read cache 既有语义；PDF 不在 Read handler 内叠加媒体
 预算特殊兜底，共享请求媒体策略继续由 runtime provider-request 投影边界统一维护。

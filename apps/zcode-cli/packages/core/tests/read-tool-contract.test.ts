@@ -297,8 +297,11 @@ describe("Read model-result harness", () => {
     });
   });
 
-  it("rejects unsupported binary extensions and blocking device paths before I/O", () => {
-    expect(readInputSafeParse({ file_path: "/tmp/archive.zip" }).success).toBe(false);
+  it("no longer rejects binaries by extension and still blocks blocking device paths", () => {
+    // 扩展名拒绝已撤掉：逆向要读的就是这些文件，能不能当文本读由内容判定。
+    expect(readInputSafeParse({ file_path: "/tmp/archive.zip" }).success).toBe(true);
+    expect(readInputSafeParse({ file_path: "/tmp/target.exe" }).success).toBe(true);
+    expect(readInputSafeParse({ file_path: "/tmp/libfoo.so" }).success).toBe(true);
     expect(readInputSafeParse({ file_path: "/dev/zero" }).success).toBe(false);
     expect(readInputSafeParse({ file_path: "/tmp/image.png" }).success).toBe(true);
     expect(readInputSafeParse({ file_path: "/tmp/doc.pdf" }).success).toBe(true);
@@ -307,13 +310,8 @@ describe("Read model-result harness", () => {
   it("returns tool_use_error text for Read preflight failures", async () => {
     const fs = createMemoryFileSystem({});
 
-    const binary = await executeRead({ file_path: "/tmp/archive.zip" }, fs);
     const device = await executeRead({ file_path: "/dev/zero" }, fs);
 
-    expect(binary.success).toBe(false);
-    expect(binary.error?.message).toBe(
-      "<tool_use_error>This tool cannot read binary files. The file appears to be a binary .zip file. Please use appropriate tools for binary file analysis.</tool_use_error>",
-    );
     expect(device.success).toBe(false);
     expect(device.error?.message).toBe(
       "<tool_use_error>Cannot read '/dev/zero': this device file would block or produce infinite output.</tool_use_error>",

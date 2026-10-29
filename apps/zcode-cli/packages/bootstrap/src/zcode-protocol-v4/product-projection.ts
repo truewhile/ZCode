@@ -116,6 +116,10 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import {
   PROTOCOL_V4_LIMITS,
+  addModelRequestTimingToStats,
+  addStepToStats,
+  addToolDurationToStats,
+  addTurnToStats,
   applyConversationDeltas,
   applyConversationDeltasMutable,
   createMutableConversationSnapshotAccumulator,
@@ -2202,6 +2206,9 @@ export class ProductProjection {
         op: "row.appended",
         row,
       });
+      // 统计条的「轮」只在可见用户意图轮 +1：model-only 维护轮（goal continuation、
+      // manual /compact）不是用户感知的一轮，与 DSH 的 assistant-turn 口径对齐。
+      deltas.push({ op: "state.updated", patch: { stats: addTurnToStats(this.snapshot.stats) } });
     }
 
     if (fact.executionKind === "agent") {
@@ -2515,7 +2522,26 @@ export class ProductProjection {
         // 保持当前状态，等首个有效 text/reasoning/tool 进展再清理，避免标签闪退。
         return positiveInteger(payload.attempt, 1) <= 1 ? this.setApiRetry(null) : [];
       case "model_request_completed":
-        return this.setApiRetry(null);
+        // 速度读数按请求级样本累计（main_turn 才代表可见输出）；标题/压缩等
+        // sidecar 请求不计入，否则速度会被短请求污染。step 计数在 ModelComplete
+        // 侧累计，这里只负责计时字段。
+        return [
+          ...this.setApiRetry(null),
+          ...(payload.querySource === undefined || payload.querySource === "main_turn"
+            ? [
+                {
+                  op: "state.updated" as const,
+                  patch: {
+                    stats: addModelRequestTimingToStats(this.snapshot.stats, {
+                      durationMs: payload.durationMs,
+                      timeToFirstContentMs: payload.timeToFirstContentMs,
+                      outputTokens: payload.usage?.outputTokens,
+                    }),
+                  },
+                },
+              ]
+            : []),
+        ];
       case "model_request_failed":
         return payload.retryable ? [] : this.setApiRetry(null);
       case "model_stream_stalled":
@@ -3275,7 +3301,11 @@ export class ProductProjection {
           }),
         )
       : [];
-    return [{ op: "row.upserted", row: next }, ...planDeltas];
+    return [
+      { op: "row.upserted", row: next },
+      ...planDeltas,
+      ...this.toolDurationStatsDeltas(next),
+    ];
   }
 
   /**
@@ -3331,22 +3361,31 @@ export class ProductProjection {
     if (!row) return [];
     const cancelled =
       payload.error.type === CoreErrorType.ToolCancelled || payload.error.code === "TOOL_CANCELLED";
+    const next: ToolCallRow = {
+      ...row,
+      // Stop 会先产生 tool_cancelled，再产生 cancelled turn；若先把工具
+      // 终态写成 error，后续只收口 running row 的 turn reducer 无法纠正为 stopped。
+      status: cancelled ? "cancelled" : "error",
+      progress: undefined,
+      ...(cancelled
+        ? { error: undefined }
+        : { error: { code: payload.error.type, message: payload.error.message } }),
+      endedAt: this.ms(event),
+    };
     return [
-      {
-        op: "row.upserted",
-        row: {
-          ...row,
-          // Stop 会先产生 tool_cancelled，再产生 cancelled turn；若先把工具
-          // 终态写成 error，后续只收口 running row 的 turn reducer 无法纠正为 stopped。
-          status: cancelled ? "cancelled" : "error",
-          progress: undefined,
-          ...(cancelled
-            ? { error: undefined }
-            : { error: { code: payload.error.type, message: payload.error.message } }),
-          endedAt: this.ms(event),
-        },
-      },
+      { op: "row.upserted", row: next },
+      ...this.toolDurationStatsDeltas(next),
     ];
+  }
+
+  /**
+   * 工具执行耗时进统计条。权威口径 = 行的 startedAt → endedAt；两者任一缺失
+   * （scheduled 早退、迟到的终态）就不计，不用请求级时间兜底，避免把权限等待算成工具耗时。
+   */
+  private toolDurationStatsDeltas(row: ToolCallRow): ConversationDelta[] {
+    if (row.startedAt === undefined || row.endedAt === undefined) return [];
+    const stats = addToolDurationToStats(this.snapshot.stats, row.endedAt - row.startedAt);
+    return stats === this.snapshot.stats ? [] : [{ op: "state.updated", patch: { stats } }];
   }
 
   // ── 权限交互（阻塞交互 → 状态）──
@@ -4932,6 +4971,9 @@ export class ProductProjection {
             cacheWriteTokens: cumulative.cacheWriteTokens + (usage.cacheWriteTokens ?? 0),
           },
         },
+        // 统计条的「步」= 主链路模型往返次数。ModelComplete 会进 transcript，
+        // 冷恢复重放同样重建，因此刷新后步数不丢（与计时字段的偏斜不同）。
+        stats: addStepToStats(this.snapshot.stats),
       },
     });
     // ModelComplete 是缺少 network completed 事件时的成功兜底，不能让重试提示悬挂。

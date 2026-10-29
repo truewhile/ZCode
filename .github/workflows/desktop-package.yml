@@ -1,0 +1,263 @@
+name: Desktop Package
+
+# 在 GitHub Actions 上打桌面安装包：Windows NSIS、macOS DMG/ZIP、Linux AppImage/deb/rpm/pacman。
+# 规范、变量与排障见 docs/ci-github-actions-desktop-packaging.md。
+#
+# 打包命令与本地完全一致：`pnpm bundle:desktop -- --os <os> --arch <arch>`。
+# 该入口本身完成 prepare:runtime-assets → 生产构建 → electron-builder → 产物依赖自检 → 体积审计，
+# 流水线不再复制一份 electron-builder 参数，避免 GitHub 与本地两条链路各自漂移。
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+      - staging
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "逗号分隔的目标平台：macos-arm64,macos-x64,windows-x64,windows-arm64,linux-x64,linux-arm64；留空走默认矩阵"
+        required: false
+        default: ""
+      environment:
+        description: "后端环境：production 打正式包，test 打 Preview/_TEST 包"
+        required: false
+        type: choice
+        options:
+          - production
+          - test
+        default: production
+
+# 同一 ref 只保留最新一次打包；PR 上取消旧提交，避免排队占满 runner。
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # GitHub runner 直连官方下载源；不显式设置时 bundle.mjs 会回落到 npmmirror 镜像。
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  # CI 不跑 husky 钩子。
+  HUSKY: "0"
+  # 安装包身份与 _TEST 后缀都由这一个变量派生，tag 链路必须稳定为 production。
+  ZCODE_ENV: ${{ github.event.inputs.environment || 'production' }}
+
+jobs:
+  # 目标矩阵的唯一所有者是 scripts/ci/resolve-desktop-package-matrix.mjs。
+  # YAML 只负责把它转成 matrix.include，避免两处各自维护 runner 标签与 os/arch 映射。
+  meta:
+    name: Resolve target matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      platforms: ${{ steps.resolve.outputs.platforms }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # 矩阵脚本自己的测试先跑一遍：平台收窄、未知平台失败、workflow 走统一入口。
+      - name: Self-check matrix resolver
+        shell: bash
+        run: node --test scripts/test/ci-desktop-package-matrix.test.mjs
+
+      - name: Resolve matrix
+        id: resolve
+        shell: bash
+        env:
+          # PR 只打 Windows x64 与 Linux x64：两者都能在标准 runner 上跑完，
+          # 足够验证打包链路；macOS 双架构与 arm64 留给 tag 与手动触发，避免 PR 常驻占满 runner。
+          REQUESTED_PLATFORMS: ${{ github.event.inputs.platforms || (github.event_name == 'pull_request' && 'windows-x64,linux-x64' || '') }}
+        run: |
+          node scripts/ci/resolve-desktop-package-matrix.mjs \
+            --platforms "$REQUESTED_PLATFORMS" \
+            --github-output "$GITHUB_OUTPUT"
+
+  build:
+    name: Package ${{ matrix.name }}
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    # 冷缓存下 macOS 打包（agent bundle + tsc + DMG）实测 40~60 分钟，留足余量。
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.meta.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 必须先于 setup-node 安装：setup-node 的 cache: pnpm 会执行 pnpm 取 store 路径。
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Electron runtime 与 electron-builder 辅助包（NSIS / dmg-builder / appimage / fpm）
+      # 各自落在 cache 目录；命中失败只是重下一轮，不影响正确性。
+      - name: Cache electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('packages/desktop/package.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ matrix.arch }}-
+
+      # deb / rpm / pacman 由 fpm 调系统 rpmbuild 与 xz 产出；node-pty 没有 linux 预编译产物，
+      # desktop 包的 postinstall 会走 electron-rebuild，需要 python3 + make + g++。
+      - name: Install Linux packaging prerequisites
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm xz-utils build-essential python3
+
+      - name: Assert Node version
+        shell: bash
+        run: node scripts/assert-node-version.mjs
+
+      - name: Install workspace dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      # 签名默认关闭：没有证书时 electron-builder 仍产出可安装但未签名的包。
+      # 在仓库 Secrets 配好证书后，这一步按目标平台把开关与证书路径写进 $GITHUB_ENV，
+      # 打包步骤不再内联表达式，也避免把另一平台的证书变量混进来。
+      - name: Resolve signing flags
+        shell: bash
+        env:
+          TARGET_OS: ${{ matrix.os }}
+          MAC_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          MAC_CERTIFICATE: ${{ secrets.APPLE_CSC_LINK }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CSC_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          {
+            # electron-builder.config.js 只有在 identity 存在时才打开 hardened runtime 签名。
+            # 两个开关先落默认值，后面按平台覆盖，避免上一步残留影响其它平台。
+            echo "ZCODE_ENABLE_MAC_SIGN=0"
+            echo "ZCODE_ENABLE_WINDOWS_SIGN=0"
+            case "$TARGET_OS" in
+              mac)
+                if [ -n "$MAC_SIGNING_IDENTITY" ] && [ -n "$MAC_CERTIFICATE" ]; then
+                  echo "ZCODE_ENABLE_MAC_SIGN=1"
+                  printf 'APPLE_SIGNING_IDENTITY=%s\n' "$MAC_SIGNING_IDENTITY"
+                  printf 'CSC_LINK=%s\n' "$MAC_CERTIFICATE"
+                  printf 'CSC_KEY_PASSWORD=%s\n' "$MAC_CERTIFICATE_PASSWORD"
+                fi
+                ;;
+              win)
+                # 仓库内的 vsigntool 封装（scripts/sign-windows.ps1）不随开源树发布，
+                # 因此 ZCODE_ENABLE_WINDOWS_SIGN 固定为 0；CSC_LINK 交由 electron-builder 自带 signtool 使用。
+                if [ -n "$WINDOWS_CERTIFICATE" ]; then
+                  printf 'CSC_LINK=%s\n' "$WINDOWS_CERTIFICATE"
+                  printf 'CSC_KEY_PASSWORD=%s\n' "$WINDOWS_CERTIFICATE_PASSWORD"
+                fi
+                ;;
+            esac
+          } >>"$GITHUB_ENV"
+
+      - name: Package installer
+        shell: bash
+        env:
+          ZCODE_TARGET_OS: ${{ matrix.os }}
+          ZCODE_TARGET_ARCH: ${{ matrix.arch }}
+        run: pnpm bundle:desktop -- --os ${{ matrix.os }} --arch ${{ matrix.arch }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: zcode-${{ matrix.name }}
+          if-no-files-found: error
+          retention-days: 14
+          # 只收安装包与更新元数据；win-unpacked / linux-unpacked 等中间目录不入 artifact。
+          path: |
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.AppImage
+            packages/desktop/dist/*.deb
+            packages/desktop/dist/*.rpm
+            packages/desktop/dist/*.pkg.tar.zst
+            packages/desktop/dist/latest*.yml
+            packages/desktop/dist/*.blockmap
+
+  # tag 推送才发布：草稿 Release + 汇总 SHA-256，省掉人工从各 job 逐个下载。
+  # 正式发版（灰度 / 全量 / CDN 预热）仍由既有发布链路负责，这里只交付可下载产物。
+  release:
+    name: Publish draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [meta, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          # 不合并目录：各平台都会产出 update 清单（macos-arm64 / macos-x64 都叫 latest-mac.yml），
+          # 合并会互相覆盖。
+          merge-multiple: false
+
+      # Release 资产是扁平命名空间。安装包与 blockmap 文件名自带平台与架构，可直接拍平；
+      # latest*.yml 是「每个架构一份」的更新清单，拍平必然重名，也不适合作为 GitHub Release 资产，
+      # 因此只进 artifact，不进 Release 与摘要。
+      - name: Collect flat release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find artifacts -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \
+            -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
+            -o -name '*.pkg.tar.zst' -o -name '*.blockmap' \) \
+            -exec cp -n {} release-assets/ \;
+          ls -l release-assets
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sed 's#  \./#  #' > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ZCode ${{ needs.meta.outputs.version }} (${{ github.ref_name }})
+          draft: true
+          prerelease: ${{ contains(github.ref_name, 'test') }}
+          generate_release_notes: true
+          files: |
+            release-assets/**

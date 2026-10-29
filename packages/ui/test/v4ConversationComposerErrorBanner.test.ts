@@ -319,15 +319,14 @@ describe("ConversationComposer error banner", () => {
 
   it("forwards model recovery actions to the shared error banner", () => {
     const onOpenModelSettings = vi.fn();
-    const onOpenModelUpgrade = vi.fn();
 
     renderComposerWithError("No model", {
       onOpenModelSettings,
-      onOpenModelUpgrade,
     });
 
     expect(captured.chatErrorBannerProps?.onOpenModelSettings).toBe(onOpenModelSettings);
-    expect(captured.chatErrorBannerProps?.onOpenUpgrade).toBe(onOpenModelUpgrade);
+    // 官方套餐升级入口已移除：错误横幅只保留模型配置动作。
+    expect(captured.chatErrorBannerProps?.onOpenUpgrade).toBeUndefined();
   });
 
   it("不再把 snapshot api retry 状态传入输入框工具条", () => {

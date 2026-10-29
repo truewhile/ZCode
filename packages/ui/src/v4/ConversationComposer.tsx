@@ -191,6 +191,7 @@ import {
   type V4ComposerConfigPicker,
 } from "@/v4/composer/configPickerState.js";
 import { WebElementContextAttachmentChip } from "@/v4/composer/WebElementContextAttachmentChip.js";
+import { ComposerSessionStats } from "@/v4/composer/ComposerSessionStats.js";
 import { ConversationSelectionReferenceChip } from "@/v4/composer/ConversationSelectionReferenceChip.js";
 import type { AttachmentPutFn } from "@/v4/composer/attachmentUpload.js";
 import { useScopedConversationTelemetrySupervisor } from "@/v4/telemetry/ConversationTelemetryAttachment.js";
@@ -510,7 +511,6 @@ export interface ConversationComposerProps {
   onDismissError?: () => void;
   /** 无可用模型横幅的恢复动作；由 SessionPane 注入壳层导航，组件不直接操作 tab。 */
   onOpenModelSettings?: () => void;
-  onOpenModelUpgrade?: () => void;
   modelConfigTarget?: ChatErrorBannerModelConfigTarget;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   /**
@@ -597,7 +597,6 @@ function ConversationComposerImpl({
   error,
   onDismissError,
   onOpenModelSettings,
-  onOpenModelUpgrade,
   modelConfigTarget = "local",
   onOpenCodeViewer,
   listenAddToChatEvents = true,
@@ -2570,7 +2569,6 @@ function ConversationComposerImpl({
             }
             onDismiss={onDismissError}
             onOpenModelSettings={onOpenModelSettings}
-            onOpenUpgrade={onOpenModelUpgrade}
             modelConfigTarget={modelConfigTarget}
           />
         </div>
@@ -2700,6 +2698,13 @@ function ConversationComposerImpl({
           </p>
         ) : null}
       </div>
+      {/* 会话统计条（轮/步 · tok/s · 累计 token · 缓存命中）：数据全部来自 v4 投影，
+          草稿态（无 snapshot）不渲染；规格见 docs/chat/composer-session-stats.md。 */}
+      <ComposerSessionStats
+        className="mt-1.5 px-1"
+        stats={snapshot?.stats}
+        usage={snapshot?.usage ?? null}
+      />
       <ImagePreviewDialog
         initialIndex={attachmentPreviewIndex}
         items={composerMediaPreviewItems}

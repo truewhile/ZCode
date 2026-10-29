@@ -952,6 +952,10 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       getView: async () => ({ revision: 0, providers: [] }),
       refresh: async () => ({ revision: 0, providers: [] }),
       testModelConnectivity: async () => ({ results: [] }),
+      listModels: async () => ({
+        success: false,
+        error: { code: "provider-unavailable", message: "No workspace bridge is connected." },
+      }),
     }),
     modelSelectionService: createEmptyHomeOnlyService<RootServices["modelSelectionService"]>({
       getView: async () => ({ revision: 0, providers: [] }),

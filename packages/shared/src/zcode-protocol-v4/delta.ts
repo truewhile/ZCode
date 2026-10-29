@@ -26,6 +26,7 @@ import {
   sessionMetaStateSchema,
   sessionModelTransitionSchema,
   sessionUsageStateSchema,
+  sessionStatsStateSchema,
   subagentProjectionStateSchema,
   workspaceHookAdmissionStateSchema,
 } from "./snapshot.js";
@@ -49,6 +50,8 @@ export const statePatchSchema = z.object({
   config: sessionConfigStateSchema.optional(),
   modelTransition: sessionModelTransitionSchema.nullable().optional(),
   usage: sessionUsageStateSchema.optional(),
+  // 会话统计（composer 统计条）：与 usage 同属展示事实，不参与 revision 记账。
+  stats: sessionStatsStateSchema.optional(),
   queue: queueStateSchema.optional(),
   pendingInteractions: z.array(pendingInteractionSchema).optional(),
   pendingCommands: z.array(commandStateSummarySchema).optional(),

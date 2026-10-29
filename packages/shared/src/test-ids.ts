@@ -518,6 +518,16 @@ export const TID_MODEL_PROVIDER_MODEL_INPUT = "model-provider-model-input";
 export const TID_MODEL_PROVIDER_MODEL_DELETE_BUTTON = "model-provider-model-delete-button";
 /** 模型供应商添加模型按钮 */
 export const TID_MODEL_PROVIDER_ADD_MODEL_BUTTON = "model-provider-add-model-button";
+/** 模型供应商从 Provider `/models` 导入模型的按钮 */
+export const TID_MODEL_PROVIDER_IMPORT_MODELS_BUTTON = "model-provider-import-models-button";
+/** 从 API 导入模型的勾选弹窗 */
+export const TID_MODEL_PROVIDER_MODEL_PICKER = "model-provider-model-picker";
+/** 导入弹窗里的模型勾选行（动态后缀为模型 ID） */
+export const TID_MODEL_PROVIDER_MODEL_PICKER_ROW = "model-provider-model-picker-row";
+/** 导入弹窗的确认添加按钮 */
+export const TID_MODEL_PROVIDER_MODEL_PICKER_CONFIRM = "model-provider-model-picker-confirm";
+/** 导入弹窗的重新读取按钮 */
+export const TID_MODEL_PROVIDER_MODEL_PICKER_REFRESH = "model-provider-model-picker-refresh";
 
 // Chat Toolbar
 /** 聊天工具栏模型选择按钮 */
@@ -589,6 +599,12 @@ export const TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER = "v4-composer-background-w
 export const TID_V4_COMPOSER_CUA_ENTRY = "v4-composer-cua-entry";
 /** v4 composer 发送按钮 */
 export const TID_V4_COMPOSER_SEND = "v4-composer-send";
+/** v4 composer 会话统计条（轮/步 · tok/s · 累计 token · 缓存命中） */
+export const TID_V4_COMPOSER_STATS = "v4-composer-stats";
+/** v4 composer 统计条：轮/步与速度 pill */
+export const TID_V4_COMPOSER_STATS_ACTIVITY = "v4-composer-stats-activity";
+/** v4 composer 统计条：累计 token 与缓存命中 pill */
+export const TID_V4_COMPOSER_STATS_USAGE = "v4-composer-stats-usage";
 /** v4 暂停队列发送确认：清空队列并发送 */
 export const TID_V4_COMPOSER_CLEAR_QUEUE_SEND = "v4-composer-clear-queue-send";
 /** v4 暂停队列发送确认：保留队列并发送 */

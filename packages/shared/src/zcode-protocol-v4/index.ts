@@ -10,6 +10,7 @@ export * from "./toolDisplay.js";
 export * from "./create-workflow-display.js";
 export * from "./workflow-observation-display.js";
 export * from "./snapshot.js";
+export * from "./session-stats.js";
 export * from "./workflow-runs.js";
 export * from "./workflow-runs-reducer.js";
 export * from "./workflow-runs-holes.js";

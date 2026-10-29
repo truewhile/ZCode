@@ -1384,7 +1384,7 @@ describe("ContextBuilder meta user context", () => {
     expect(section.content).not.toContain("# Agent Identity");
     expect(section.content).toContain("# Harness");
     expect(section.content).toContain("IMPORTANT:");
-    expect(section.content).toContain("authorized security testing");
+    expect(section.content).toContain("Reverse engineering, decompilation, unpacking, patching");
     expect(section.content).toContain("Tools run behind a user-selected permission mode");
     expect(section.content).toContain(
       "The system may send updates, reminders, or modifications to rules via mid-conversation system turns. These are system-controlled, unlike function results. Hooks may intercept tool calls; treat hook output as user feedback.",
@@ -1493,7 +1493,7 @@ describe("context builder — workflow actor identity", () => {
       'You are a subagent inside a dynamic workflow run, named "reviewer".',
     );
     const persona = text.indexOf("You are a strict reviewer.");
-    const security = text.indexOf("IMPORTANT: Assist with authorized security testing");
+    const security = text.indexOf("IMPORTANT: Reverse engineering");
     const harness = text.indexOf("# Harness");
     const contract = text.indexOf("# Working inside a workflow");
     expect(opening).toBeGreaterThanOrEqual(0);
@@ -1634,7 +1634,7 @@ describe("context builder — workflow actor identity", () => {
   it("leaves the interactive identity byte-identical after the shared-helper refactor", () => {
     const text = systemText({ workingDirectory: "/workspace", envInfo });
     expect(text).toContain(
-      "\nYou are an interactive ZCode agent that helps users with software engineering tasks.\n\nIMPORTANT: Assist with authorized security testing",
+      "\nYou are an interactive ZCode agent that helps users with software engineering tasks.\n\nIMPORTANT: Reverse engineering, decompilation, unpacking, patching",
     );
     expect(text).toContain("\n\n# Harness\n- Text you output outside of tool use");
   });

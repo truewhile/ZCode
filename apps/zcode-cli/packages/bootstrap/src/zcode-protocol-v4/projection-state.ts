@@ -1,14 +1,15 @@
 // ProductProjection 状态工厂与派生规则。
 // 本文件只放纯函数：初始快照、availability/inputRouting 派生、revision 递进判定。
-import type {
-  ActionAvailability,
-  ConversationDelta,
-  ConversationSnapshot,
-  GoalState,
-  InputRouting,
-  SessionActionAvailability,
-  SessionControl,
-  StatePatch,
+import {
+  EMPTY_SESSION_STATS,
+  type ActionAvailability,
+  type ConversationDelta,
+  type ConversationSnapshot,
+  type GoalState,
+  type InputRouting,
+  type SessionActionAvailability,
+  type SessionControl,
+  type StatePatch,
 } from "@zcode/shared/zcode-protocol-v4";
 
 /**
@@ -72,6 +73,7 @@ export function createInitialConversationSnapshot(
       mode: "build",
     },
     modelTransition: null,
+    stats: { ...EMPTY_SESSION_STATS },
     usage: {
       contextWindow: null,
       cumulative: {
