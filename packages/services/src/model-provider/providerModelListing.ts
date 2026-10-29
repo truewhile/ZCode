@@ -61,6 +61,11 @@ export function resolveProviderModelListUrls(input: {
 export function resolveProviderModelListHeaders(input: {
   readonly apiType: ProviderApiType;
   readonly apiKey: string;
+  /**
+   * 是否带 `anthropic-version`。默认带；关闭用于读取聚合网关的“原始模型目录”。
+   * 有些转发站按该头判定客户端类型，带与不带会返回两套不同命名的清单。
+   */
+  readonly includeAnthropicVersion?: boolean;
 }): Record<string, string> {
   const apiKey = normalizeApiKeyForHeader(input.apiKey);
   const headers: Record<string, string> = { accept: "application/json" };
@@ -69,7 +74,7 @@ export function resolveProviderModelListHeaders(input: {
     // Anthropic 兼容网关会同时读 x-api-key 与 Bearer Authorization；两者一致才不会互相覆盖。
     headers["x-api-key"] = apiKey;
     headers.authorization = `Bearer ${apiKey}`;
-    headers["anthropic-version"] = ANTHROPIC_VERSION;
+    if (input.includeAnthropicVersion !== false) headers["anthropic-version"] = ANTHROPIC_VERSION;
     return headers;
   }
   headers.authorization = `Bearer ${apiKey}`;
@@ -149,6 +154,30 @@ async function readErrorSummary(response: Response): Promise<string> {
 
 const RETRYABLE_STATUS = new Set([404, 405]);
 
+/**
+ * 请求变体按顺序尝试：同一地址先不带 `anthropic-version`，再带上。
+ *
+ * 原因（2026-10-29 实测 api.linkmy.fun 这类聚合转发站）：`GET /v1/models` 会按
+ * `anthropic-version` 头切换目录。带该头时返回的是站点自造的假名
+ * （`claude-fable-5-dd-arret-1.6-tpg` 之类把真名倒序拼接的别名），不带时返回真实
+ * 模型 ID（`gpt-6.1-terra`）。用户手工 curl 看不到那个头，于是两边清单对不上。
+ *
+ * 官方 Anthropic 的 /v1/models 需要该头，会先返回 4xx，再落到带头的变体重试。
+ */
+function resolveProviderModelListVariants(input: {
+  readonly apiType: ProviderApiType;
+  readonly apiKey: string;
+}): { headers: Record<string, string>; includeAnthropicVersion: boolean }[] {
+  const request = { apiType: input.apiType, apiKey: input.apiKey };
+  if (input.apiType !== "anthropic-messages") {
+    return [{ headers: resolveProviderModelListHeaders(request), includeAnthropicVersion: false }];
+  }
+  return [false, true].map((includeAnthropicVersion) => ({
+    headers: resolveProviderModelListHeaders({ ...request, includeAnthropicVersion }),
+    includeAnthropicVersion,
+  }));
+}
+
 export function createProviderModelLister(dependencies: {
   readonly fetchImpl?: ProviderModelListFetcher;
   readonly timeoutMs?: number;
@@ -178,27 +207,25 @@ export function createProviderModelLister(dependencies: {
         error: { code: "missing-api-key", message: "Provider API Key is empty." },
       };
     }
-    const headers = resolveProviderModelListHeaders({
-      apiType: request.apiType,
-      apiKey: request.apiKey,
-    });
+    const variants = resolveProviderModelListVariants(request);
+    const candidates = urls.flatMap((url) => variants.map((variant) => ({ url, ...variant })));
 
     let lastError: ProviderModelListResult & { success: false } = {
       success: false,
       error: { code: "network-error", message: "Provider model list request failed." },
     };
-    for (const url of urls) {
+    for (const candidate of candidates) {
       let response: Response;
       try {
-        response = await fetchImpl(url, {
+        response = await fetchImpl(candidate.url, {
           method: "GET",
-          headers,
+          headers: candidate.headers,
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
-        // 网络层失败不换地址重试：换 host 路径不会修好 DNS/超时，只会放大等待。
+        // 网络层失败不换变体重试：换 header 不会修好 DNS/超时，只会放大等待。
         const message = error instanceof Error ? error.message : String(error);
-        log.warn(undefined, "读取 Provider 模型清单失败", { url, error: message });
+        log.warn(undefined, "读取 Provider 模型清单失败", { url: candidate.url, error: message });
         return { success: false, error: { code: "network-error", message } };
       }
       if (response.ok) {
@@ -220,9 +247,13 @@ export function createProviderModelLister(dependencies: {
       }
       lastError = {
         success: false,
-        error: { code: "http-error", message: await readErrorSummary(response) },
+        error: {
+          code: "http-error",
+          message: await readErrorSummary(response),
+        },
       };
-      if (!RETRYABLE_STATUS.has(response.status)) return lastError;
+      // 只有“地址不对/方法不对”才继续换下一个候选；401/403 换 header 变体也不会变成成功。
+      if (!RETRYABLE_STATUS.has(response.status) && response.status !== 400) return lastError;
     }
     return lastError;
   };

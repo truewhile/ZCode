@@ -55,8 +55,12 @@ Host 侧请求路径：
 
 - `api.baseUrl` 路径已带版本段（`/v1`、`/v4` …）→ `{baseUrl}/models`；
 - 否则先试 `{baseUrl}/v1/models`，404 时回退 `{baseUrl}/models`。
-- 请求头：`anthropic-messages` 用 `x-api-key` + `anthropic-version`；
-  其余格式用 `Authorization: Bearer`。Key 经过 `normalizeApiKeyForHeader` 归一化。
+- 请求头：`anthropic-messages` 先只发 `x-api-key` + `Authorization`，**不带** `anthropic-version`；
+  该变体返回 400 时再带 `anthropic-version: 2023-06-01` 重试；其余格式只用 `Authorization: Bearer`。
+  Key 经过 `normalizeApiKeyForHeader` 归一化。
+  原因（2026-10-29 实测聚合转发站 api.linkmy.fun）：`GET /v1/models` 会按 `anthropic-version`
+  切换目录，带该头返回站点自造的倒序别名（`claude-fable-5-dd-arret-1.6-tpg`），不带时返回真实
+  模型 ID（`gpt-6.1-terra`）。用户手工 curl 不会带该头，因此必须让首个候选与手工调用同形。
 
 响应解析兼容 `[{id}]`、`{ data: [] }`、`{ models: [] }`、`{ result: [] }`；条目支持字符串或
 `{ id | name | model, display_name?, created_at? }`，按出现顺序去重。
@@ -74,7 +78,8 @@ Host 侧请求路径：
 | 场景 | 期望 | 不应发生 |
 | --- | --- | --- |
 | OpenAI 兼容供应商 Base URL 为 `https://api.example.com/v1` | 请求 `https://api.example.com/v1/models`，Bearer 鉴权 | 拼成 `/v1/v1/models` |
-| Anthropic Messages 供应商 Base URL 为 `https://api.anthropic.com` | 请求 `https://api.anthropic.com/v1/models`，带 `x-api-key` | 用 Bearer 或漏 `anthropic-version` |
+| Anthropic Messages 供应商 Base URL 为 `https://api.anthropic.com` | 先不带 `anthropic-version` 请求（400 后带版本头重试成功），返回真实模型 ID | 用 Bearer 而非 `x-api-key`，或只发带版本头的一次请求 |
+| 聚合转发站按 `anthropic-version` 切换目录 | 得到真实模型 ID（`gpt-6.1-terra`），不是站点自造别名（`claude-fable-5-dd-arret-1.6-tpg`） | 勾选列表里出现一串前缀相同、名字倒序的假 ID |
 | 网关只提供根路径 `/models` | 首个候选 404 后回退成功 | 直接报错 |
 | Key 无效（401） | 弹窗显示 HTTP 401 与响应摘要，可重试 | 静默空列表 |
 | 清单含已配置模型 | 该模型从可导入列表里过滤，底部提示已添加 | 允许重复添加导致 `Model 已存在` 报错 |

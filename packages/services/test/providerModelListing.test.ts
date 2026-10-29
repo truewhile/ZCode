@@ -34,7 +34,7 @@ describe("resolveProviderModelListUrls", () => {
 });
 
 describe("resolveProviderModelListHeaders", () => {
-  it("Anthropic Messages 用 x-api-key 且带版本头", () => {
+  it("Anthropic Messages 默认带 x-api-key、Bearer 与版本头", () => {
     expect(
       resolveProviderModelListHeaders({ apiType: "anthropic-messages", apiKey: "sk-ant" }),
     ).toMatchObject({
@@ -42,6 +42,16 @@ describe("resolveProviderModelListHeaders", () => {
       authorization: "Bearer sk-ant",
       "anthropic-version": "2023-06-01",
     });
+  });
+
+  it("显式关闭版本头时保留鉴权但不发 anthropic-version", () => {
+    const headers = resolveProviderModelListHeaders({
+      apiType: "anthropic-messages",
+      apiKey: "sk-ant",
+      includeAnthropicVersion: false,
+    });
+    expect(headers["anthropic-version"]).toBeUndefined();
+    expect(headers["x-api-key"]).toBe("sk-ant");
   });
 
   it("OpenAI 兼容格式只用 Bearer，并截掉 Key 里的中文备注", () => {
@@ -164,5 +174,48 @@ describe("createProviderModelLister", () => {
       error: { code: "invalid-base-url" },
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("Anthropic Messages 先不带版本头取真名清单，不再发第二次请求", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ id: "gpt-6.1-terra", display_name: "GPT-6.1" }] }), {
+          status: 200,
+        }),
+    );
+    const lister = createProviderModelLister({ fetchImpl });
+    await expect(
+      lister({ ...request, apiType: "anthropic-messages", baseUrl: "https://relay.example.com/v1" }),
+    ).resolves.toEqual({
+      success: true,
+      models: [{ modelId: "gpt-6.1-terra", displayName: "GPT-6.1" }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const headers = new Headers(fetchImpl.mock.calls[0]?.[1]?.headers);
+    // 聚合转发站按该头切换目录：带上会返回自造别名，所以首个候选必须不带。
+    expect(headers.get("anthropic-version")).toBeNull();
+    expect(headers.get("x-api-key")).toBe("sk-live");
+  });
+
+  it("官方 Anthropic 在无版本头返回 400 后带上版本头重试", async () => {
+    const fetchImpl = vi
+      .fn<(input: string, init: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        new Response('{"type":"error","error":{"type":"invalid_request_error"}}', { status: 400 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ id: "claude-sonnet-4-6" }] }), { status: 200 }),
+      );
+    const lister = createProviderModelLister({ fetchImpl });
+    await expect(
+      lister({
+        ...request,
+        apiType: "anthropic-messages",
+        baseUrl: "https://api.anthropic.com/v1",
+      }),
+    ).resolves.toEqual({ success: true, models: [{ modelId: "claude-sonnet-4-6" }] });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const retryHeaders = new Headers(fetchImpl.mock.calls[1]?.[1]?.headers);
+    expect(retryHeaders.get("anthropic-version")).toBe("2023-06-01");
   });
 });
