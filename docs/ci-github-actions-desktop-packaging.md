@@ -20,7 +20,9 @@ GitHub 账号就能跑通的打包入口：推 tag 出安装包，PR 能验证�
 2. **矩阵只有一个所有者**：目标平台、runner 标签与 `--os/--arch` 的映射集中在
    [`scripts/ci/resolve-desktop-package-matrix.mjs`](../scripts/ci/resolve-desktop-package-matrix.mjs)。
    workflow 的 `meta` job 调用它，再用 `fromJSON(needs.meta.outputs.matrix)` 展开
-   `matrix.include`。
+   `matrix.include`。脚本输出的是**目标数组本身**（`[{name,os,arch,runner}, ...]`），
+   不是 `{ include: [...] }`——后者会让 GitHub 求值 `strategy` 时报
+   `A mapping was not expected`。
 3. **未知平台直接失败**：`platforms` 输入里出现不认识的平台名时脚本抛错并退出 1，不静默忽略。
 4. **签名默认关闭**：没有证书时产出未签名但可安装的包。证书 secrets 存在时才按平台打开开关。
 5. **tag 才发 Release**：`v*` tag 推送后汇总全部平台产物，生成 `SHA256SUMS.txt`，创建**草稿**
@@ -122,6 +124,7 @@ sudo xattr -rd com.apple.quarantine /Applications/ZCode.app
 node --test scripts/test/ci-desktop-package-matrix.test.mjs
 
 # 矩阵输出（CI 与本地同一份实现）
+# 输出是 JSON 数组，直接对应 matrix.include
 node scripts/ci/resolve-desktop-package-matrix.mjs
 node scripts/ci/resolve-desktop-package-matrix.mjs --platforms "windows-x64,linux-arm64"
 

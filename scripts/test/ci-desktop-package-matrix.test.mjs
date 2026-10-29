@@ -96,7 +96,10 @@ test("命令行输出可直接作为 matrix.include 使用", async () => {
   );
 
   const parsed = JSON.parse(stdout);
-  assert.deepEqual(parsed.include, [
+  // include 必须是数组：workflow 里写的是 `matrix: include: ${{ fromJSON(...) }}`，
+  // 一旦包成 { include: [...] }，GitHub 求值 strategy 时会报 "A mapping was not expected"。
+  assert.ok(Array.isArray(parsed), `expected an array, received ${typeof parsed}`);
+  assert.deepEqual(parsed, [
     { name: "windows-x64", os: "win", arch: "x64", runner: "windows-2025" },
   ]);
 });
@@ -121,6 +124,11 @@ test("--github-output 写入 matrix/platforms/version 三个键", async () => {
     assert.deepEqual(keys, ["matrix", "platforms", "version"]);
     assert.match(content, /platforms=macos-arm64/);
     assert.match(content, /version=\d+\.\d+\.\d+/);
+
+    // GITHUB_OUTPUT 里的 matrix 同样是数组字面量，不是带 include 包裹的对象。
+    const matrixLine = content.split("\n").find((line) => line.startsWith("matrix="));
+    assert.ok(matrixLine, "matrix output missing");
+    assert.ok(Array.isArray(JSON.parse(matrixLine.slice("matrix=".length))));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -147,4 +155,38 @@ test("Release 只收扁平化后可去重的资产，更新清单留在 artifact
   assert.match(workflow, /files:\s*\|\s*\n\s*release-assets\/\*\*/);
   assert.doesNotMatch(workflow, /files:\s*\|\s*\n\s*artifacts\/\*\*/);
   assert.doesNotMatch(workflow, /release-assets\/latest/);
+});
+
+test("workflow 里引用的每个 matrix.* 键都存在于目标对象", async () => {
+  const workflow = await readFile(workflowPath, "utf8");
+
+  // matrix.include 必须是单个表达式取值；写成映射字面量就是 GitHub 报
+  // "A mapping was not expected" 的那种错误。这里按行断言，避免为了解析 YAML
+  // 把 yaml 依赖带进 meta job（那一步跑在 pnpm install 之前）。
+  const includeLine = workflow
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("include:"));
+  assert.ok(includeLine, "workflow 缺少 matrix.include");
+  assert.match(
+    includeLine,
+    /^include:\s*\$\{\{\s*fromJSON\(needs\.meta\.outputs\.matrix\)\s*\}\}$/,
+  );
+  assert.doesNotMatch(includeLine, /\{$/);
+
+  // 只匹配 `${{ matrix.xxx }}` 形式的表达式，避免把脚本名 resolve-desktop-package-matrix.mjs
+  // 里的 "matrix.mjs" 误当成矩阵键。
+  const referencedKeys = new Set(
+    [...workflow.matchAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g)].map(
+      (match) => match[1],
+    ),
+  );
+  assert.ok(referencedKeys.size > 0, "workflow 未引用任何 matrix 键");
+
+  for (const target of DESKTOP_PACKAGE_TARGETS) {
+    const availableKeys = new Set(Object.keys(target));
+    for (const key of referencedKeys) {
+      assert.ok(availableKeys.has(key), `matrix.${key} 不在目标对象 ${target.name} 上`);
+    }
+  }
 });

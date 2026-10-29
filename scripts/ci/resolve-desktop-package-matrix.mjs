@@ -112,7 +112,11 @@ function main(argv) {
   });
   const version = readWorkspaceVersion();
 
-  const matrixJson = JSON.stringify({ include });
+  // 只输出目标数组本身，不带外层 { include: [...] }：
+  // workflow 侧写的是 `matrix: include: ${{ fromJSON(...) }}`，include 必须是数组。
+  // 若这里再包一层对象，GitHub 会在求值 strategy 时报
+  // "A mapping was not expected"。
+  const matrixJson = JSON.stringify(include);
   if (githubOutput) {
     writeGithubOutput(githubOutput, {
       matrix: matrixJson,
